@@ -1,0 +1,14 @@
+[Unit]
+Description=FLIGHTSCANNER ADS-B radar display
+After=graphical.target dump1090-fa.service
+Wants=dump1090-fa.service
+
+[Service]
+User=adsb
+WorkingDirectory=/home/adsb/flightscanner
+ExecStart=/home/adsb/flightscanner/.venv/bin/python /home/adsb/flightscanner/main.py --live --fullscreen
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=graphical.target

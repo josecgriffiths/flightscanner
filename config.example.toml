@@ -1,0 +1,25 @@
+# Copy this file to config.toml and edit for your receiver location.
+# config.toml is gitignored -- never commit real coordinates.
+
+[receiver]
+latitude = 51.5000
+longitude = -0.1200
+
+[radar]
+range_nm = 50
+radius_px = 300
+show_altitude_labels = false
+
+[display]
+width = 720
+height = 720
+fullscreen = false
+fps = 30
+
+[data]
+dump1090_path = "/run/dump1090-fa/aircraft.json"
+refresh_hz = 2.0
+
+[demo]
+aircraft_count = 15
+seed = 42
