@@ -102,8 +102,9 @@ def draw_aircraft_symbol(
     # nose, left wingtip, tail, right wingtip -- unrotated, nose pointing up (north)
     local_points = [(0, -size * 0.6), (-size * 0.4, size * 0.4), (0, size * 0.15), (size * 0.4, size * 0.4)]
     # rotate clockwise by `angle` (track is measured clockwise from north)
+    cos_a, sin_a = math.cos(angle), math.sin(angle)
     rotated = [
-        (x + lx * math.sin(angle) + ly * math.cos(angle), y - lx * math.cos(angle) + ly * math.sin(angle))
+        (x + lx * cos_a - ly * sin_a, y + lx * sin_a + ly * cos_a)
         for lx, ly in local_points
     ]
     pygame.draw.polygon(surface, color, rotated)

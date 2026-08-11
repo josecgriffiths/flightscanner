@@ -18,8 +18,18 @@ fps = 30
 
 [data]
 dump1090_path = "/run/dump1090-fa/aircraft.json"
+stats_path = "/run/dump1090-fa/stats.json"
 refresh_hz = 2.0
 
 [demo]
 aircraft_count = 15
 seed = 42
+
+[weather]
+enabled = true
+refresh_minutes = 10
+
+[news]
+enabled = true
+feed_url = "https://www.aviation24.be/feed/"
+refresh_minutes = 15

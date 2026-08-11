@@ -50,6 +50,12 @@ class App:
         self.radar_page = RadarPage(
             config.receiver.latitude, config.receiver.longitude, config.radar.range_nm
         )
+        receiver_page.configure(config.data.stats_path)
+        weather_page.configure(
+            config.receiver.latitude, config.receiver.longitude,
+            config.weather.enabled, config.weather.refresh_minutes,
+        )
+        news_page.configure(config.news.enabled, config.news.feed_url, config.news.refresh_minutes)
 
         self._next_data_poll = 0.0
         self._data_poll_interval = 1.0 / max(config.data.refresh_hz, 0.1)

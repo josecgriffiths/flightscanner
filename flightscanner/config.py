@@ -35,6 +35,7 @@ class DisplayConfig:
 @dataclass
 class DataConfig:
     dump1090_path: str = "/run/dump1090-fa/aircraft.json"
+    stats_path: str = "/run/dump1090-fa/stats.json"
     refresh_hz: float = 2.0
 
 
@@ -45,12 +46,27 @@ class DemoConfig:
 
 
 @dataclass
+class WeatherConfig:
+    enabled: bool = True
+    refresh_minutes: float = 10.0
+
+
+@dataclass
+class NewsConfig:
+    enabled: bool = True
+    feed_url: str = "https://www.aviation24.be/feed/"
+    refresh_minutes: float = 15.0
+
+
+@dataclass
 class Config:
     receiver: ReceiverConfig = field(default_factory=ReceiverConfig)
     radar: RadarConfig = field(default_factory=RadarConfig)
     display: DisplayConfig = field(default_factory=DisplayConfig)
     data: DataConfig = field(default_factory=DataConfig)
     demo: DemoConfig = field(default_factory=DemoConfig)
+    weather: WeatherConfig = field(default_factory=WeatherConfig)
+    news: NewsConfig = field(default_factory=NewsConfig)
 
 
 def load_config(path: Path | str | None) -> Config:
@@ -72,6 +88,8 @@ def load_config(path: Path | str | None) -> Config:
         display=DisplayConfig(**raw.get("display", {})),
         data=DataConfig(**raw.get("data", {})),
         demo=DemoConfig(**raw.get("demo", {})),
+        weather=WeatherConfig(**raw.get("weather", {})),
+        news=NewsConfig(**raw.get("news", {})),
     )
 
 
