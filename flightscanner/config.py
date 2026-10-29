@@ -22,6 +22,7 @@ class RadarConfig:
     range_nm: float = 50.0
     radius_px: int = 300
     show_altitude_labels: bool = False
+    proximity_alert_nm: float = 1.0
 
 
 @dataclass

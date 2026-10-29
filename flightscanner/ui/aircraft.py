@@ -110,6 +110,13 @@ def draw_aircraft_symbol(
     pygame.draw.polygon(surface, color, rotated)
 
 
+def draw_proximity_ring(surface: pygame.Surface, pos: tuple[float, float], now: float) -> None:
+    """Pulsing ring drawn around an aircraft within the proximity alert range."""
+    pulse = (math.sin(now * theme.ALERT_FLASH_HZ * 2 * math.pi) + 1) / 2  # 0..1
+    radius = theme.AIRCRAFT_SYMBOL_SIZE * (1.2 + 0.6 * pulse)
+    pygame.draw.circle(surface, theme.ALERT, pos, radius, theme.LINE_WIDTH_NORMAL)
+
+
 def draw_label(
     surface: pygame.Surface,
     font: pygame.font.Font,

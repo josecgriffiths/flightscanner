@@ -14,10 +14,17 @@ from flightscanner.ui import aircraft_details, radar, theme
 
 
 class RadarPage:
-    def __init__(self, receiver_lat: float | None, receiver_lon: float | None, radar_range_nm: float) -> None:
+    def __init__(
+        self,
+        receiver_lat: float | None,
+        receiver_lon: float | None,
+        radar_range_nm: float,
+        proximity_alert_nm: float = 1.0,
+    ) -> None:
         self.receiver_lat = receiver_lat
         self.receiver_lon = receiver_lon
         self.radar_range_nm = radar_range_nm
+        self.proximity_alert_nm = proximity_alert_nm
         self.renderer = aircraft_ui.AircraftRenderer()
         self.selected_icao: str | None = None
         self._label_font = pygame.font.Font(theme.FONT_NAME, theme.FONT_SIZE_SMALL)
@@ -72,18 +79,28 @@ class RadarPage:
             self.selected_icao = None
 
         used_label_rects: list[pygame.Rect] = []
+        nearest_alert_nm: float | None = None
         for ac in in_range:
             pos = self._last_positions[ac.icao]
             selected = ac.icao == self.selected_icao
+            in_alert_range = (
+                self.proximity_alert_nm > 0 and distances[ac.icao] <= self.proximity_alert_nm
+            )
             color = theme.AIRCRAFT_SELECTED if selected else (
                 theme.AIRCRAFT_STALE if ac.is_stale() else theme.AIRCRAFT_SYMBOL
             )
+            if in_alert_range:
+                aircraft_ui.draw_proximity_ring(surface, pos, now)
+                nearest_alert_nm = min(nearest_alert_nm or distances[ac.icao], distances[ac.icao])
             aircraft_ui.draw_aircraft_symbol(surface, pos, ac.track, color)
             aircraft_ui.draw_label(
                 surface, self._label_font, ac.display_callsign(), pos, used_label_rects, color
             )
 
         radar.draw_range_and_count_labels(surface, self.radar_range_nm, len(in_range))
+
+        if nearest_alert_nm is not None:
+            radar.draw_proximity_banner(surface, nearest_alert_nm, now)
 
         if not in_range:
             self._draw_center_message(surface, ["LISTENING", "1090 MHz", "NO AIRCRAFT CURRENTLY RECEIVED"])

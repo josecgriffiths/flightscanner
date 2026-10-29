@@ -25,6 +25,10 @@ AIRCRAFT_SYMBOL = (225, 230, 228)
 AIRCRAFT_STALE = (110, 118, 116)
 AIRCRAFT_SELECTED = ACCENT
 RECEIVER_MARKER = (90, 160, 150)
+ALERT = (235, 70, 70)
+
+# --- Proximity alert -----------------------------------------------------
+ALERT_FLASH_HZ = 2.0  # pulses per second for the overhead-aircraft alert
 
 # --- Fonts (sizes in px, actual Font objects built lazily) -------------
 FONT_NAME = None  # pygame default font

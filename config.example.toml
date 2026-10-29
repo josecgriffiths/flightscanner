@@ -9,6 +9,7 @@ longitude = -0.1200
 range_nm = 50
 radius_px = 300
 show_altitude_labels = false
+proximity_alert_nm = 1.0   # flash a warning when an aircraft is within this many nm
 
 [display]
 width = 720

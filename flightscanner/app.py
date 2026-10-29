@@ -48,7 +48,8 @@ class App:
 
         self.source = self._build_source(scenario)
         self.radar_page = RadarPage(
-            config.receiver.latitude, config.receiver.longitude, config.radar.range_nm
+            config.receiver.latitude, config.receiver.longitude, config.radar.range_nm,
+            config.radar.proximity_alert_nm,
         )
         receiver_page.configure(config.data.stats_path)
         weather_page.configure(

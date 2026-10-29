@@ -1,6 +1,8 @@
 """Static radar backdrop: range rings, crosshair, receiver marker, compass."""
 from __future__ import annotations
 
+import math
+
 import pygame
 
 from flightscanner.ui import theme
@@ -60,4 +62,16 @@ def draw_range_and_count_labels(
     text = f"{aircraft_count} AIRCRAFT   RANGE {int(range_nm)} NM"
     surf = font.render(text, True, theme.TEXT_MUTED)
     rect = surf.get_rect(center=(cx, y))
+    surface.blit(surf, rect)
+
+
+def draw_proximity_banner(surface: pygame.Surface, distance_nm: float, now: float) -> None:
+    """Flashing banner shown near the top when an aircraft is within alert range."""
+    pulse = (math.sin(now * theme.ALERT_FLASH_HZ * 2 * math.pi) + 1) / 2  # 0..1
+    color = tuple(int(c * (0.5 + 0.5 * pulse)) for c in theme.ALERT)
+
+    font = pygame.font.Font(theme.FONT_NAME, theme.FONT_SIZE_NORMAL)
+    text = f"AIRCRAFT OVERHEAD -- {distance_nm:.2f} NM"
+    surf = font.render(text, True, color)
+    rect = surf.get_rect(center=(theme.SCREEN_CENTER[0], 90))
     surface.blit(surf, rect)
