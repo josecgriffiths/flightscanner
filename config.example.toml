@@ -8,7 +8,7 @@ longitude = -0.1200
 [radar]
 range_nm = 50
 radius_px = 300
-show_altitude_labels = false
+show_altitude_labels = true   # second label line: altitude + climb/descend arrow
 proximity_alert_nm = 1.0   # flash a warning when an aircraft is within this many nm
 
 [display]
@@ -16,6 +16,7 @@ width = 720
 height = 720
 fullscreen = false
 fps = 30
+effects = true   # radar sweep + glow; set false if the Pi struggles to hold the frame rate
 
 [data]
 dump1090_path = "/run/dump1090-fa/aircraft.json"

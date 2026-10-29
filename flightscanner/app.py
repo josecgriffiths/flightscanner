@@ -18,7 +18,7 @@ from flightscanner.config import Config
 from flightscanner.pages import news_page, receiver_page, system_page, weather_page
 from flightscanner.pages.radar_page import RadarPage
 from flightscanner.ui import debug as debug_ui
-from flightscanner.ui import navigation, theme
+from flightscanner.ui import gfx, navigation, theme, widgets
 from flightscanner.ui.input import GestureType, InputHandler
 
 logger = logging.getLogger(__name__)
@@ -43,13 +43,15 @@ class App:
         )
         self.clock = pygame.time.Clock()
         self.input_handler = InputHandler()
-        self._branding_font = pygame.font.Font(theme.FONT_NAME, theme.FONT_SIZE_SMALL)
-        self._studio_font = pygame.font.Font(theme.FONT_NAME, theme.FONT_SIZE_TINY)
+        self._fade_from: pygame.Surface | None = None  # last frame of the previous page
+        self._fade_start = 0.0
+        self._plain_backdrop: pygame.Surface | None = None
 
         self.source = self._build_source(scenario)
         self.radar_page = RadarPage(
             config.receiver.latitude, config.receiver.longitude, config.radar.range_nm,
-            config.radar.proximity_alert_nm,
+            config.radar.proximity_alert_nm, config.radar.show_altitude_labels,
+            config.display.effects,
         )
         receiver_page.configure(config.data.stats_path)
         weather_page.configure(
@@ -117,18 +119,26 @@ class App:
         elif key == pygame.K_f:
             pygame.display.toggle_fullscreen()
         elif key == pygame.K_LEFT:
-            self.current_page = navigation.previous_page(self.current_page)
+            self._go_to(navigation.previous_page(self.current_page))
         elif key == pygame.K_RIGHT:
-            self.current_page = navigation.next_page(self.current_page)
+            self._go_to(navigation.next_page(self.current_page))
 
     def _handle_gesture(self, gesture) -> None:
         if gesture.type == GestureType.SWIPE_LEFT:
-            self.current_page = navigation.next_page(self.current_page)
+            self._go_to(navigation.next_page(self.current_page))
         elif gesture.type == GestureType.SWIPE_RIGHT:
-            self.current_page = navigation.previous_page(self.current_page)
+            self._go_to(navigation.previous_page(self.current_page))
         elif gesture.type == GestureType.TAP:
             if self.current_page == navigation.Page.RADAR:
                 self.radar_page.handle_tap((gesture.x, gesture.y))
+
+    def _go_to(self, page: navigation.Page) -> None:
+        """Switch page, cross-fading from a snapshot of the current frame."""
+        if page == self.current_page:
+            return
+        self._fade_from = self.screen.copy()
+        self._fade_start = time.monotonic()
+        self.current_page = page
 
     def _poll_data(self) -> None:
         now = time.monotonic()
@@ -142,7 +152,8 @@ class App:
             logger.exception("Failed to read aircraft data; keeping last known snapshot")
 
     def _render(self) -> None:
-        self.screen.fill(theme.BACKGROUND)
+        if self.current_page != navigation.Page.RADAR:
+            self.screen.blit(self._page_backdrop(), (0, 0))
 
         receiver_online = self.source.status() != "OFFLINE"
 
@@ -157,24 +168,45 @@ class App:
         elif self.current_page == navigation.Page.NEWS:
             news_page.draw(self.screen)
 
-        self._draw_branding()
+        self._draw_bezel()
         navigation.draw_page_indicator(self.screen, self.current_page)
+        self._draw_page_fade()
 
         if self.debug_enabled:
             self._draw_debug()
 
         pygame.display.flip()
 
-    def _draw_branding(self) -> None:
-        surf = self._branding_font.render(BRANDING_TEXT, True, theme.TEXT_MUTED)
-        rect = surf.get_rect()
-        rect.topleft = (theme.MARGIN, theme.MARGIN)
-        self.screen.blit(surf, rect)
+    def _page_backdrop(self) -> pygame.Surface:
+        """Plain scope gradient (no rings) used behind the non-radar pages."""
+        if self._plain_backdrop is None:
+            self._plain_backdrop = widgets.build_page_backdrop()
+        return self._plain_backdrop
 
-        studio_surf = self._studio_font.render(STUDIO_TEXT, True, theme.GRID_LINE)
-        studio_rect = studio_surf.get_rect()
-        studio_rect.topleft = (theme.MARGIN, rect.bottom + 2)
-        self.screen.blit(studio_surf, studio_rect)
+    def _draw_bezel(self) -> None:
+        """Curved branding and clock along the top of the round bezel."""
+        gfx.arc_text(
+            self.screen, BRANDING_TEXT, theme.FONT_SIZE_SMALL, theme.TEXT_SECONDARY,
+            theme.BEZEL_TEXT_OUTER_RADIUS - 2, theme.BEZEL_BRAND_ANGLE, tracking=3,
+        )
+        gfx.arc_text(
+            self.screen, STUDIO_TEXT, theme.FONT_SIZE_MICRO, theme.TEXT_MUTED,
+            theme.BEZEL_TEXT_RADIUS - 8, theme.BEZEL_BRAND_ANGLE, tracking=2,
+        )
+        gfx.arc_text(
+            self.screen, time.strftime("%H:%M"), theme.FONT_SIZE_SMALL, theme.TEXT_SECONDARY,
+            theme.BEZEL_TEXT_RADIUS + 4, theme.BEZEL_CLOCK_ANGLE, role="mono", tracking=1,
+        )
+
+    def _draw_page_fade(self) -> None:
+        if self._fade_from is None:
+            return
+        t = (time.monotonic() - self._fade_start) / theme.PAGE_FADE_SECONDS
+        if t >= 1.0:
+            self._fade_from = None
+            return
+        self._fade_from.set_alpha(round(255 * (1 - t) ** 2))
+        self.screen.blit(self._fade_from, (0, 0))
 
     def _draw_debug(self) -> None:
         # placed below the branding text (top-left) to avoid overlap

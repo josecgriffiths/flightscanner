@@ -10,11 +10,13 @@ from __future__ import annotations
 import pygame
 
 from flightscanner.adsb.receiver_stats import ReceiverStatsReader
-from flightscanner.ui import theme
+from flightscanner.ui import gfx, theme, widgets
 
 _reader: ReceiverStatsReader | None = None
 
-ROW_SPACING = 44
+TILE_WIDTH = 196
+TILE_HEIGHT = 74
+TILE_GAP = 14
 
 
 def configure(stats_path: str) -> None:
@@ -25,48 +27,35 @@ def configure(stats_path: str) -> None:
 def draw(surface: pygame.Surface) -> None:
     stats = _reader.read() if _reader is not None else None
 
-    heading_font = pygame.font.Font(theme.FONT_NAME, theme.FONT_SIZE_HEADING)
-    value_font = pygame.font.Font(theme.FONT_NAME, theme.FONT_SIZE_VALUE)
-    label_font = pygame.font.Font(theme.FONT_NAME, theme.FONT_SIZE_SMALL)
-
+    widgets.draw_page_title(surface, "RECEIVER")
     cx, cy = theme.SCREEN_CENTER
-    title_surf = heading_font.render("RECEIVER STATUS", True, theme.TEXT_PRIMARY)
-    surface.blit(title_surf, title_surf.get_rect(center=(cx, cy - 150)))
 
     if stats is None:
-        note_surf = label_font.render("NO DATA FROM dump1090-fa", True, theme.TEXT_MUTED)
-        surface.blit(note_surf, note_surf.get_rect(center=(cx, cy)))
+        gfx.blit_text(surface, "No data from dump1090-fa", theme.FONT_SIZE_SMALL,
+                      theme.TEXT_MUTED, center=(cx, cy))
         return
 
     rows = [
-        ("MESSAGES/SEC", _format_rate(stats.messages_per_second)),
+        ("MESSAGES / SEC", _format_rate(stats.messages_per_second)),
         ("MESSAGES TOTAL", _format_count(stats.messages_total)),
         ("SIGNAL", _format_db(stats.signal_dbfs)),
         ("NOISE", _format_db(stats.noise_dbfs)),
         ("STRONG SIGNALS", _format_count(stats.strong_signals)),
-        ("POSITIONS/MIN", _format_count(stats.position_count)),
+        ("POSITIONS / MIN", _format_count(stats.position_count)),
     ]
 
-    y = cy - 80
-    for label, value in rows:
-        label_surf = label_font.render(label, True, theme.TEXT_MUTED)
-        surface.blit(label_surf, label_surf.get_rect(center=(cx, y)))
-        value_surf = value_font.render(value, True, theme.TEXT_PRIMARY)
-        surface.blit(value_surf, value_surf.get_rect(center=(cx, y + 24)))
-        y += ROW_SPACING
+    rects = widgets.tile_grid(2, 3, TILE_WIDTH, TILE_HEIGHT, TILE_GAP, (cx, cy + 30))
+    for rect, (label, value) in zip(rects, rows):
+        color = theme.ACCENT if label.startswith("MESSAGES / SEC") else theme.TEXT_PRIMARY
+        widgets.draw_stat_tile(surface, rect, label, value, color)
 
 
 def draw_placeholder(surface: pygame.Surface, title: str) -> None:
-    """Used by WEATHER/NEWS pages, which have no dedicated data source yet."""
-    font = pygame.font.Font(theme.FONT_NAME, theme.FONT_SIZE_NORMAL)
-    small = pygame.font.Font(theme.FONT_NAME, theme.FONT_SIZE_SMALL)
+    """Used by WEATHER/NEWS pages when their data source is unavailable."""
+    widgets.draw_page_title(surface, title)
     cx, cy = theme.SCREEN_CENTER
-
-    title_surf = font.render(title, True, theme.TEXT_PRIMARY)
-    surface.blit(title_surf, title_surf.get_rect(center=(cx, cy - 20)))
-
-    note_surf = small.render("COMING SOON", True, theme.TEXT_MUTED)
-    surface.blit(note_surf, note_surf.get_rect(center=(cx, cy + 20)))
+    gfx.blit_text(surface, "Not available right now", theme.FONT_SIZE_SMALL,
+                  theme.TEXT_MUTED, center=(cx, cy))
 
 
 def _format_rate(value: float | None) -> str:

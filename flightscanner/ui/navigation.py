@@ -1,11 +1,11 @@
-"""Page state machine and the small dot page indicator."""
+"""Page state machine and the curved page-dot indicator."""
 from __future__ import annotations
 
 from enum import Enum
 
 import pygame
 
-from flightscanner.ui import theme
+from flightscanner.ui import gfx, theme
 
 
 class Page(Enum):
@@ -37,16 +37,17 @@ def previous_page(current: Page) -> Page:
 
 
 def draw_page_indicator(surface: pygame.Surface, current: Page) -> None:
+    """Dots along the bottom of the bezel, following the circle."""
     if current not in PAGE_ORDER:
         return
-    dot_radius = 4
-    spacing = 16
     count = len(PAGE_ORDER)
-    total_width = spacing * (count - 1)
-    start_x = theme.SCREEN_CENTER[0] - total_width // 2
-    y = theme.SCREEN_HEIGHT - 28
+    # bearing 180 is bottom centre; increasing bearing moves left on the bottom arc
+    first = 180 + theme.PAGE_DOT_SPACING_DEG * (count - 1) / 2
 
     for i, page in enumerate(PAGE_ORDER):
-        x = start_x + i * spacing
-        color = theme.ACCENT if page == current else theme.GRID_LINE
-        pygame.draw.circle(surface, color, (x, y), dot_radius)
+        pos = gfx.polar(first - i * theme.PAGE_DOT_SPACING_DEG, theme.PAGE_DOT_RADIUS)
+        if page == current:
+            gfx.blit_glow(surface, theme.ACCENT, pos, 3, size=22)
+            gfx.aa_dot(surface, theme.ACCENT, pos, 4)
+        else:
+            gfx.aa_dot(surface, theme.GRID_LINE, pos, 3)

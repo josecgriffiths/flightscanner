@@ -137,13 +137,15 @@ longitude = -0.1200
 [radar]
 range_nm = 50
 radius_px = 300
-show_altitude_labels = false
+show_altitude_labels = true   # second label line: altitude + climb/descend arrow
+proximity_alert_nm = 1.0
 
 [display]
 width = 720
 height = 720
 fullscreen = false
 fps = 30
+effects = true   # radar sweep + glow; set false if the Pi can't hold the frame rate
 
 [data]
 dump1090_path = "/run/dump1090-fa/aircraft.json"
@@ -198,10 +200,22 @@ from `/home/adsb/flightscanner`.
 
 ## Design notes
 
-- **Circular display constraint**: `flightscanner/ui/theme.py` defines
-  `SCREEN_RADIUS` (360) and `SAFE_RADIUS` (315). `adsb/geometry.py`
-  provides `point_inside_safe_circle` / `rect_inside_safe_circle` helpers
-  so important content can be kept off the corners the round bezel hides.
+- **Circular display constraint**: the UI is laid out in concentric bands
+  for the round 720x720 Waveshare panel -- radar scope inside 300 px, then
+  bearing ticks, compass letters, and curved bezel text (branding, clock,
+  aircraft count, altitude legend, page dots) out to `SAFE_RADIUS` (352).
+  The full radial layout is documented at the top of `ui/theme.py`.
+  `adsb/geometry.py` provides `point_inside_safe_circle` /
+  `rect_inside_safe_circle` helpers so content can be kept off the corners.
+- **Visual style**: all colours, sizes and fonts live in `ui/theme.py`.
+  Aircraft are coloured by altitude (`theme.altitude_color`), leave fading
+  trails, and glow briefly as the sweep passes. Fonts are Inter and
+  JetBrains Mono, bundled in `flightscanner/assets/fonts` under the SIL
+  Open Font License (licence files alongside).
+- **Rendering cost**: anything static (radar backdrop, fonts, rendered
+  text, glow sprites, rotated aircraft sprites, panels) is built once and
+  cached in `ui/gfx.py` / `ui/radar.py`, so a frame is mostly blits. Shapes
+  that need smooth edges are drawn at 2-4x and smooth-scaled down once.
 - **No teleporting aircraft**: `ui/aircraft.py`'s `AircraftRenderer` keeps
   previous/target screen positions per ICAO and interpolates between data
   refreshes, snapping instead of gliding for very large jumps (a reseeded

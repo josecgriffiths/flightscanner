@@ -21,7 +21,7 @@ class ReceiverConfig:
 class RadarConfig:
     range_nm: float = 50.0
     radius_px: int = 300
-    show_altitude_labels: bool = False
+    show_altitude_labels: bool = True
     proximity_alert_nm: float = 1.0
 
 
@@ -31,6 +31,7 @@ class DisplayConfig:
     height: int = 720
     fullscreen: bool = False
     fps: int = 30
+    effects: bool = True  # radar sweep + glow; turn off if FPS drops on the Pi
 
 
 @dataclass

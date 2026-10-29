@@ -1,8 +1,9 @@
-"""The primary RADAR page: renders the range rings, moving aircraft,
-labels, selection and empty/offline states.
+"""The primary RADAR page: renders the scope, sweep, moving aircraft with
+trails, labels, selection and empty/offline states.
 """
 from __future__ import annotations
 
+import math
 import time
 
 import pygame
@@ -10,7 +11,11 @@ import pygame
 from flightscanner.adsb.geometry import polar_position, project_to_radar
 from flightscanner.adsb.models import Aircraft
 from flightscanner.ui import aircraft as aircraft_ui
-from flightscanner.ui import aircraft_details, radar, theme
+from flightscanner.ui import aircraft_details, gfx, radar, theme
+
+STALE_FADE = 0.55  # how far stale aircraft fade towards the background
+VERTICAL_TREND_FPM = 300  # show a climb/descend arrow beyond this rate
+PROXIMITY_BANNER_OFFSET = 215  # px from centre
 
 
 class RadarPage:
@@ -20,14 +25,19 @@ class RadarPage:
         receiver_lon: float | None,
         radar_range_nm: float,
         proximity_alert_nm: float = 1.0,
+        show_altitude_labels: bool = True,
+        effects: bool = True,
     ) -> None:
         self.receiver_lat = receiver_lat
         self.receiver_lon = receiver_lon
         self.radar_range_nm = radar_range_nm
         self.proximity_alert_nm = proximity_alert_nm
+        self.show_altitude_labels = show_altitude_labels
+        self.effects = effects
         self.renderer = aircraft_ui.AircraftRenderer()
+        self.backdrop = radar.RadarBackdrop()
+        self.sweep = radar.Sweep()
         self.selected_icao: str | None = None
-        self._label_font = pygame.font.Font(theme.FONT_NAME, theme.FONT_SIZE_SMALL)
         self._last_positions: dict[str, tuple[float, float]] = {}
         self._last_distances: dict[str, float] = {}
 
@@ -41,17 +51,21 @@ class RadarPage:
         source_aircraft: list[Aircraft],
         receiver_online: bool,
     ) -> None:
-        radar.draw_radar_background(surface, theme.RADAR_RADIUS_PX)
+        now = time.monotonic()
+        self.backdrop.draw(surface, self.radar_range_nm)
 
         if self.receiver_lat is None or self.receiver_lon is None:
-            self._draw_center_message(surface, ["NO RECEIVER LOCATION", "EDIT config.toml"])
+            self._draw_status_card(surface, "NO RECEIVER LOCATION", "Edit config.toml", theme.WARNING)
             return
 
         if not receiver_online:
-            self._draw_center_message(surface, ["RECEIVER OFFLINE", "WAITING FOR dump1090-fa"])
+            radar.draw_receiver_marker(surface, now)
+            self._draw_status_card(surface, "RECEIVER OFFLINE", "Waiting for dump1090-fa", theme.WARNING)
             return
 
-        now = time.monotonic()
+        if self.effects:
+            self.sweep.draw(surface, now)
+
         positions: dict[str, tuple[float, float]] = {}
         distances: dict[str, float] = {}
         in_range: list[Aircraft] = []
@@ -78,45 +92,122 @@ class RadarPage:
         if self.selected_icao is not None and self.selected_icao not in positions:
             self.selected_icao = None
 
-        used_label_rects: list[pygame.Rect] = []
+        if not in_range:
+            radar.draw_listening_ripples(surface, now)
+
+        radar.draw_receiver_marker(surface, now)
+
+        # draw far-to-near so close (more relevant) aircraft end up on top
+        in_range.sort(key=lambda a: -distances[a.icao])
+        colors = {ac.icao: self._aircraft_color(ac) for ac in in_range}
+
+        for ac in in_range:
+            pos = self._last_positions[ac.icao]
+            self.renderer.record_trail(ac.icao, pos, now)
+            aircraft_ui.draw_trail(surface, self.renderer.trail(ac.icao), pos, colors[ac.icao])
+
+        selected_ac = next((a for a in in_range if a.icao == self.selected_icao), None)
+        card = None
+        if selected_ac is not None:
+            card = aircraft_details.card_rect(self._last_positions[selected_ac.icao])
+
+        sweep_angle = self.sweep.angle(now) if self.effects else None
+        # seeding with the card makes labels steer clear of it
+        used_label_rects: list[pygame.Rect] = [card] if card is not None else []
         nearest_alert_nm: float | None = None
         for ac in in_range:
             pos = self._last_positions[ac.icao]
-            selected = ac.icao == self.selected_icao
+            color = colors[ac.icao]
             in_alert_range = (
                 self.proximity_alert_nm > 0 and distances[ac.icao] <= self.proximity_alert_nm
-            )
-            color = theme.AIRCRAFT_SELECTED if selected else (
-                theme.AIRCRAFT_STALE if ac.is_stale() else theme.AIRCRAFT_SYMBOL
             )
             if in_alert_range:
                 aircraft_ui.draw_proximity_ring(surface, pos, now)
                 nearest_alert_nm = min(nearest_alert_nm or distances[ac.icao], distances[ac.icao])
+            if sweep_angle is not None:
+                gfx.blit_glow(surface, color, pos, self._glow_level(pos, sweep_angle))
             aircraft_ui.draw_aircraft_symbol(surface, pos, ac.track, color)
-            aircraft_ui.draw_label(
-                surface, self._label_font, ac.display_callsign(), pos, used_label_rects, color
-            )
+            if card is None or not card.inflate(16, 16).collidepoint(pos):
+                aircraft_ui.draw_label(surface, self._label_lines(ac, color), pos, used_label_rects)
 
-        radar.draw_range_and_count_labels(surface, self.radar_range_nm, len(in_range))
-
-        if nearest_alert_nm is not None:
-            radar.draw_proximity_banner(surface, nearest_alert_nm, now)
+        gfx.arc_text(
+            surface, f"{len(in_range)} AIRCRAFT", theme.FONT_SIZE_TINY, theme.TEXT_SECONDARY,
+            theme.BEZEL_TEXT_RADIUS, theme.BEZEL_COUNT_ANGLE,
+        )
 
         if not in_range:
-            self._draw_center_message(surface, ["LISTENING", "1090 MHz", "NO AIRCRAFT CURRENTLY RECEIVED"])
+            cx, cy = theme.SCREEN_CENTER
+            gfx.blit_text(
+                surface, "LISTENING ON 1090 MHz", theme.FONT_SIZE_SMALL, theme.TEXT_SECONDARY,
+                "semibold", theme.TRACKING_LABEL, center=(cx, cy + 48),
+            )
+            gfx.blit_text(
+                surface, "No aircraft in range", theme.FONT_SIZE_TINY, theme.TEXT_MUTED,
+                center=(cx, cy + 72),
+            )
 
-        if self.selected_icao is not None:
-            selected_ac = next((a for a in in_range if a.icao == self.selected_icao), None)
-            if selected_ac is not None:
-                aircraft_details.draw_detail_panel(
-                    surface, selected_ac, distances.get(selected_ac.icao)
-                )
+        if selected_ac is not None and card is not None:
+            aircraft_ui.draw_selection(surface, self._last_positions[selected_ac.icao], now)
+            aircraft_details.draw_detail_panel(
+                surface, selected_ac, distances.get(selected_ac.icao), card
+            )
 
-    def _draw_center_message(self, surface: pygame.Surface, lines: list[str]) -> None:
-        font = pygame.font.Font(theme.FONT_NAME, theme.FONT_SIZE_NORMAL)
+        if nearest_alert_nm is not None:
+            card_on_top = card is not None and card.bottom < theme.SCREEN_CENTER[1]
+            offset = PROXIMITY_BANNER_OFFSET if card_on_top else -PROXIMITY_BANNER_OFFSET
+            radar.draw_proximity_banner(surface, nearest_alert_nm, now, theme.SCREEN_CENTER[1] + offset)
+
+    def _aircraft_color(self, ac: Aircraft) -> tuple[int, int, int]:
+        color = theme.altitude_color(ac.altitude_ft(), ac.is_ground())
+        if ac.is_stale():
+            color = theme.mix(color, theme.SCOPE_EDGE, STALE_FADE)
+        return color
+
+    def _label_lines(self, ac: Aircraft, color: tuple[int, int, int]) -> tuple:
+        callsign_color = theme.TEXT_MUTED if ac.is_stale() else theme.TEXT_PRIMARY
+        lines = [(ac.display_callsign(), callsign_color, theme.FONT_SIZE_SMALL)]
+        if self.show_altitude_labels:
+            alt = _short_altitude(ac)
+            if alt:
+                lines.append((alt, color, theme.FONT_SIZE_TINY))
+        return tuple(lines)
+
+    @staticmethod
+    def _glow_level(pos: tuple[float, float], sweep_angle: float) -> int:
+        """Aircraft flare up as the sweep passes over them, then settle."""
         cx, cy = theme.SCREEN_CENTER
-        y = cy - (len(lines) * 16)
-        for line in lines:
-            surf = font.render(line, True, theme.TEXT_MUTED)
-            surface.blit(surf, surf.get_rect(center=(cx, y)))
-            y += 32
+        bearing = math.degrees(math.atan2(pos[0] - cx, cy - pos[1])) % 360
+        behind = (sweep_angle - bearing) % 360
+        if behind > theme.SWEEP_HIGHLIGHT_DEG:
+            return 1
+        boost = 1 - behind / theme.SWEEP_HIGHLIGHT_DEG
+        return 1 + round(boost * (gfx.GLOW_LEVELS - 2))
+
+    def _draw_status_card(
+        self, surface: pygame.Surface, title: str, detail: str, color: tuple[int, int, int]
+    ) -> None:
+        width, height = 320, 92
+        card = gfx.panel(width, height)
+        rect = card.get_rect(center=(theme.SCREEN_CENTER[0], theme.SCREEN_CENTER[1] + 90))
+        surface.blit(card, rect)
+        gfx.blit_text(
+            surface, title, theme.FONT_SIZE_SMALL, color, "semibold", theme.TRACKING_LABEL,
+            center=(rect.centerx, rect.top + 34),
+        )
+        gfx.blit_text(
+            surface, detail, theme.FONT_SIZE_SMALL, theme.TEXT_SECONDARY,
+            center=(rect.centerx, rect.top + 62),
+        )
+
+
+def _short_altitude(ac: Aircraft) -> str | None:
+    """Compact data-block altitude, e.g. '35.0k ↑' or 'GND'."""
+    if ac.is_ground():
+        return "GND"
+    alt = ac.altitude_ft()
+    if alt is None:
+        return None
+    text = f"{alt / 1000:.1f}k"
+    if ac.vertical_rate is not None and abs(ac.vertical_rate) >= VERTICAL_TREND_FPM:
+        text += " ↑" if ac.vertical_rate > 0 else " ↓"
+    return text

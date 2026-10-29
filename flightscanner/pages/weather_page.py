@@ -9,7 +9,7 @@ import pygame
 
 from flightscanner.pages.receiver_page import draw_placeholder
 from flightscanner.services.weather import WeatherReader
-from flightscanner.ui import theme
+from flightscanner.ui import gfx, theme, widgets
 
 _reader: WeatherReader | None = None
 _enabled = True
@@ -34,21 +34,18 @@ def draw(surface: pygame.Surface) -> None:
         draw_placeholder(surface, "WEATHER")
         return
 
-    heading_font = pygame.font.Font(theme.FONT_NAME, theme.FONT_SIZE_HEADING)
-    value_font = pygame.font.Font(theme.FONT_NAME, 60)
-    label_font = pygame.font.Font(theme.FONT_NAME, theme.FONT_SIZE_NORMAL)
-    small_font = pygame.font.Font(theme.FONT_NAME, theme.FONT_SIZE_SMALL)
-
+    widgets.draw_page_title(surface, "WEATHER")
     cx, cy = theme.SCREEN_CENTER
 
-    title_surf = heading_font.render("WEATHER", True, theme.TEXT_PRIMARY)
-    surface.blit(title_surf, title_surf.get_rect(center=(cx, cy - 130)))
+    temp = gfx.blit_text(
+        surface, f"{reading.temperature_c:.0f}°", theme.FONT_SIZE_DISPLAY, theme.TEXT_PRIMARY,
+        "light", center=(cx + 12, cy - 50),  # nudge right: the ° makes it look off-centre
+    )
+    gfx.blit_text(
+        surface, reading.condition.upper(), theme.FONT_SIZE_SMALL, theme.ACCENT, "semibold",
+        theme.TRACKING_LABEL, center=(cx, temp.bottom + 14),
+    )
 
-    temp_surf = value_font.render(f"{reading.temperature_c:.0f}°C", True, theme.TEXT_PRIMARY)
-    surface.blit(temp_surf, temp_surf.get_rect(center=(cx, cy - 40)))
-
-    condition_surf = label_font.render(reading.condition, True, theme.ACCENT)
-    surface.blit(condition_surf, condition_surf.get_rect(center=(cx, cy + 30)))
-
-    wind_surf = small_font.render(f"WIND {reading.wind_speed_kt:.0f} KT", True, theme.TEXT_MUTED)
-    surface.blit(wind_surf, wind_surf.get_rect(center=(cx, cy + 70)))
+    wind_rect = pygame.Rect(0, 0, 220, 74)
+    wind_rect.center = (cx, cy + 120)
+    widgets.draw_stat_tile(surface, wind_rect, "WIND", f"{reading.wind_speed_kt:.0f} KT")

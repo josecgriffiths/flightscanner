@@ -49,6 +49,13 @@ class Aircraft:
     def is_stale(self, threshold_seconds: float = 30.0) -> bool:
         return self.seen is not None and self.seen > threshold_seconds
 
+    def altitude_ft(self) -> float | None:
+        """Numeric altitude (barometric preferred); None if unknown or on ground."""
+        for alt in (self.altitude_baro, self.altitude_geom):
+            if isinstance(alt, (int, float)) and not isinstance(alt, bool):
+                return float(alt)
+        return None
+
     # --- formatted display values ------------------------------------
 
     def display_altitude(self) -> str | None:

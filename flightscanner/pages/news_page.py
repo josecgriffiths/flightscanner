@@ -4,20 +4,22 @@ offline or unconfigured.
 """
 from __future__ import annotations
 
-import textwrap
+import math
 
 import pygame
 
 from flightscanner.pages.receiver_page import draw_placeholder
 from flightscanner.services.news import NewsReader
-from flightscanner.ui import theme
+from flightscanner.ui import gfx, theme, widgets
 
 _reader: NewsReader | None = None
 _enabled = True
 
-WRAP_CHARS = 34
-LINE_SPACING = 22
-HEADLINE_SPACING = 10
+TEXT_RADIUS = 300  # wrap headlines to the circle's width at this radius
+SIDE_PADDING = 24
+LINE_SPACING = 21
+HEADLINE_SPACING = 18
+BOTTOM_LIMIT = 250  # px below centre; stop before the page dots
 
 
 def configure(enabled: bool, feed_url: str, refresh_minutes: float) -> None:
@@ -36,17 +38,39 @@ def draw(surface: pygame.Surface) -> None:
         draw_placeholder(surface, "NEWS")
         return
 
-    heading_font = pygame.font.Font(theme.FONT_NAME, theme.FONT_SIZE_HEADING)
-    body_font = pygame.font.Font(theme.FONT_NAME, theme.FONT_SIZE_SMALL)
-
     cx, cy = theme.SCREEN_CENTER
-    title_surf = heading_font.render("NEWS", True, theme.TEXT_PRIMARY)
-    surface.blit(title_surf, title_surf.get_rect(center=(cx, cy - 220)))
+    y = widgets.draw_page_title(surface, "NEWS", y_offset=-245) + 26
+    body = gfx.font(theme.FONT_SIZE_SMALL, "regular")
 
-    y = cy - 160
-    for headline in headlines:
-        for line in textwrap.wrap(headline, WRAP_CHARS) or [""]:
-            line_surf = body_font.render(line, True, theme.TEXT_PRIMARY)
-            surface.blit(line_surf, line_surf.get_rect(center=(cx, y)))
+    for i, headline in enumerate(headlines):
+        lines = _wrap_to_circle(headline, body, y)
+        if y + len(lines) * LINE_SPACING > cy + BOTTOM_LIMIT:
+            break
+        if i > 0:
+            divider_y = y - HEADLINE_SPACING // 2 - 2
+            pygame.draw.line(surface, theme.GRID_LINE_FAINT, (cx - 60, divider_y), (cx + 60, divider_y))
+        for line in lines:
+            gfx.blit_text(surface, line, theme.FONT_SIZE_SMALL, theme.TEXT_PRIMARY, center=(cx, y + 6))
             y += LINE_SPACING
         y += HEADLINE_SPACING
+
+
+def _wrap_to_circle(text: str, font: pygame.font.Font, top_y: float) -> list[str]:
+    """Word-wrap so each line fits the circle's chord at its height."""
+    cy = theme.SCREEN_CENTER[1]
+    lines: list[str] = []
+    current = ""
+    y = top_y
+    for word in text.split():
+        candidate = f"{current} {word}".strip()
+        dy = abs(y - cy)
+        chord = 2 * math.sqrt(max(0.0, TEXT_RADIUS ** 2 - dy ** 2)) - 2 * SIDE_PADDING
+        if current and font.size(candidate)[0] > chord:
+            lines.append(current)
+            current = word
+            y += LINE_SPACING
+        else:
+            current = candidate
+    if current:
+        lines.append(current)
+    return lines

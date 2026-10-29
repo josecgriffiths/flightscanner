@@ -5,7 +5,10 @@ from dataclasses import dataclass
 
 import pygame
 
-from flightscanner.ui import theme
+from flightscanner.ui import gfx, theme
+
+PANEL_TOPLEFT = (150, 130)  # inside the round panel's visible area
+PANEL_SIZE = (300, 176)
 
 
 @dataclass
@@ -22,7 +25,6 @@ class DebugInfo:
 
 
 def draw_debug_overlay(surface: pygame.Surface, info: DebugInfo) -> None:
-    font = pygame.font.Font(theme.FONT_NAME, theme.FONT_SIZE_SMALL)
     lines = [
         f"FPS {info.fps:.1f}",
         f"MODE {info.mode}",
@@ -34,8 +36,8 @@ def draw_debug_overlay(surface: pygame.Surface, info: DebugInfo) -> None:
         f"LAST READ {info.last_read_ok_age_s:.1f}s ago" if info.last_read_ok_age_s is not None else "LAST READ -",
     ]
 
-    x, y = 10, 50
+    surface.blit(gfx.panel(*PANEL_SIZE, radius=12), PANEL_TOPLEFT)
+    x, y = PANEL_TOPLEFT[0] + 14, PANEL_TOPLEFT[1] + 12
     for line in lines:
-        surf = font.render(line, True, theme.ACCENT)
-        surface.blit(surf, (x, y))
-        y += surf.get_height() + 2
+        rect = gfx.blit_text(surface, line, theme.FONT_SIZE_TINY, theme.ACCENT, "mono", topleft=(x, y))
+        y = rect.bottom + 3
