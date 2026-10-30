@@ -37,10 +37,12 @@ class App:
 
         pygame.init()
         pygame.display.set_caption(f"{BRANDING_TEXT} - {STUDIO_TEXT}")
-        flags = pygame.FULLSCREEN if fullscreen else 0
-        self.screen = pygame.display.set_mode(
-            (config.display.width, config.display.height), flags
-        )
+        self._display_size = (config.display.width, config.display.height)
+        self._display_flags = pygame.FULLSCREEN if fullscreen else 0
+        pygame.display.set_mode(self._display_size, self._display_flags)
+        # everything draws to this off-screen frame; _present() copies it to the window
+        self.screen = pygame.Surface(self._display_size).convert()
+        self._present_failures = 0
         self.clock = pygame.time.Clock()
         self.input_handler = InputHandler()
         self._fade_from: pygame.Surface | None = None  # last frame of the previous page
@@ -175,6 +177,32 @@ class App:
         if self.debug_enabled:
             self._draw_debug()
 
+        self._present()
+
+    def _present(self) -> None:
+        """Copy the finished frame to the window and flip.
+
+        Under Wayland, SDL occasionally reports the window surface as locked
+        for a frame. Drawing to an off-screen frame means only this one blit
+        can hit that, so the frame is skipped instead of crashing the app.
+        If it persists, the window surface is rebuilt.
+        """
+        window = pygame.display.get_surface()
+        try:
+            window.blit(self.screen, (0, 0))
+        except pygame.error as exc:
+            self._present_failures += 1
+            if self._present_failures == 1 or self._present_failures % 30 == 0:
+                logger.warning(
+                    "Skipped frame (%d in a row): %s; window locked=%s size=%s",
+                    self._present_failures, exc, window.get_locked(), window.get_size(),
+                )
+            if self._present_failures >= 30:
+                logger.warning("Rebuilding the window surface")
+                pygame.display.set_mode(self._display_size, self._display_flags)
+                self._present_failures = 0
+            return
+        self._present_failures = 0
         pygame.display.flip()
 
     def _page_backdrop(self) -> pygame.Surface:
